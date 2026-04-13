@@ -6,7 +6,20 @@ No I/O, no framework dependencies — easy to test in isolation.
 """
 
 from dataclasses import dataclass
-from domain.entities import Interval
+from domain.entities import Interval, PersonalBest
+
+
+@dataclass(frozen=True)
+class PersonalBestRecord:
+    """Represents a newly achieved personal best."""
+    pb_type: str
+    value: float
+    description: str
+    previous_best: float | None = None
+
+    @property
+    def is_improvement(self) -> bool:
+        return self.previous_best is None or self.value < self.previous_best
 
 
 @dataclass(frozen=True)
@@ -82,3 +95,77 @@ def compute_workout_stats(intervals: list[Interval]) -> WorkoutStats:
         worst_pace_sec_per_km=max(paces) if paces else 0.0,
         intervals=interval_stats,
     )
+
+
+def detect_personal_bests(intervals: list[Interval], stats: WorkoutStats, 
+                         existing_bests: dict[str, PersonalBest]) -> list[PersonalBestRecord]:
+    """
+    Detect personal bests from workout data.
+    
+    Args:
+        intervals: List of intervals from the workout
+        stats: Computed workout statistics
+        existing_bests: Dict of pb_type -> PersonalBest for current records
+    
+    Returns:
+        List of newly achieved personal best records
+    """
+    new_bests = []
+    
+    # Check distance-based pace records
+    distance_totals = {}
+    distance_times = {}
+    
+    # Aggregate intervals by distance to find best times
+    for interval in intervals:
+        dist = interval.distance_meters
+        if dist not in distance_totals:
+            distance_totals[dist] = 0
+            distance_times[dist] = 0
+        distance_totals[dist] += dist
+        distance_times[dist] += interval.duration_seconds
+    
+    # Check for pace PBs at common distances
+    for distance_meters in [400, 800, 1600, 5000]:
+        if distance_meters in distance_times:
+            time = distance_times[distance_meters]
+            pb_type = f"pace_{distance_meters}m"
+            existing = existing_bests.get(pb_type)
+            existing_time = existing.value if existing else None
+            
+            if existing_time is None or time < existing_time:
+                new_bests.append(PersonalBestRecord(
+                    pb_type=pb_type,
+                    value=time,
+                    description=f"{distance_meters}m in {format_duration(time)}",
+                    previous_best=existing_time
+                ))
+    
+    # Check total distance PB
+    total_dist = stats.total_distance_meters
+    if total_dist > 0:
+        existing_dist = existing_bests.get("total_distance")
+        existing_value = existing_dist.value if existing_dist else None
+        
+        if existing_value is None or total_dist > existing_value:
+            new_bests.append(PersonalBestRecord(
+                pb_type="total_distance",
+                value=float(total_dist),
+                description=f"Total distance: {total_dist}m",
+                previous_best=existing_value
+            ))
+    
+    # Check average pace PB (lower is better for pace)
+    if stats.avg_pace_sec_per_km > 0:
+        existing_pace = existing_bests.get("avg_pace")
+        existing_value = existing_pace.value if existing_pace else None
+        
+        if existing_value is None or stats.avg_pace_sec_per_km < existing_value:
+            new_bests.append(PersonalBestRecord(
+                pb_type="avg_pace",
+                value=stats.avg_pace_sec_per_km,
+                description=f"Average pace: {format_pace(stats.avg_pace_sec_per_km)}",
+                previous_best=existing_value
+            ))
+    
+    return new_bests

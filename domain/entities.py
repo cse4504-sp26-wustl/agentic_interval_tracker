@@ -33,3 +33,14 @@ class Interval:
     distance_meters: int
     duration_seconds: float
     rest_seconds: float = 0.0
+
+
+@dataclass(frozen=True)
+class PersonalBest:
+    id: int
+    runner_id: int
+    pb_type: str  # e.g., 'pace_400m', 'pace_800m', 'total_distance', 'avg_pace'
+    value: float  # time in seconds for pace, meters for distance
+    workout_id: int
+    achieved_date: str
+    previous_best: Optional[float] = None

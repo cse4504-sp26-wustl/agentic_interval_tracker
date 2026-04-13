@@ -11,7 +11,7 @@ never any specific database driver.
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from domain.entities import Runner, Workout, Interval
+from domain.entities import Runner, Workout, Interval, PersonalBest
 
 
 class RunnerRepository(ABC):
@@ -42,4 +42,21 @@ class IntervalRepository(ABC):
     @abstractmethod
     def get_for_workout(self, workout_id: int) -> list[Interval]:
         """Return all intervals for the given workout, ordered by interval_number."""
+        ...
+
+
+class PersonalBestRepository(ABC):
+    @abstractmethod
+    def get_best_for_runner(self, runner_id: int, pb_type: str) -> Optional[PersonalBest]:
+        """Return the current personal best of given type for the runner, or None."""
+        ...
+
+    @abstractmethod
+    def get_all_for_runner(self, runner_id: int) -> list[PersonalBest]:
+        """Return all personal bests for the given runner."""
+        ...
+
+    @abstractmethod
+    def save(self, personal_best: PersonalBest) -> PersonalBest:
+        """Save a new personal best record, returning the saved record with ID."""
         ...

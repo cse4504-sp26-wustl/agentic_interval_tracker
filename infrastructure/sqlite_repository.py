@@ -10,8 +10,8 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-from domain.entities import Runner, Workout, Interval
-from domain.repositories import RunnerRepository, WorkoutRepository, IntervalRepository
+from domain.entities import Runner, Workout, Interval, PersonalBest
+from domain.repositories import RunnerRepository, WorkoutRepository, IntervalRepository, PersonalBestRepository
 
 DB_PATH = Path(__file__).parent.parent / "data" / "tracker.db"
 
@@ -48,6 +48,17 @@ def init_db(db_path: Path = DB_PATH) -> None:
                 distance_meters  INTEGER NOT NULL,
                 duration_seconds REAL    NOT NULL,
                 rest_seconds     REAL    NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS personal_bests (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                runner_id     INTEGER NOT NULL REFERENCES runners(id),
+                pb_type       TEXT    NOT NULL,
+                value         REAL    NOT NULL,
+                workout_id    INTEGER NOT NULL REFERENCES workouts(id),
+                achieved_date TEXT    NOT NULL,
+                previous_best REAL,
+                UNIQUE(runner_id, pb_type)
             );
         """)
 
@@ -110,3 +121,68 @@ class SqliteIntervalRepository(IntervalRepository):
                 (workout_id,),
             ).fetchall()
         return [Interval(**dict(r)) for r in rows]
+
+
+class SqlitePersonalBestRepository(PersonalBestRepository):
+    def __init__(self, db_path: Path = DB_PATH):
+        self._db_path = db_path
+
+    def get_best_for_runner(self, runner_id: int, pb_type: str) -> Optional[PersonalBest]:
+        with _get_connection(self._db_path) as conn:
+            row = conn.execute(
+                """SELECT * FROM personal_bests 
+                   WHERE runner_id = ? AND pb_type = ?""",
+                (runner_id, pb_type),
+            ).fetchone()
+        return PersonalBest(**dict(row)) if row else None
+
+    def get_all_for_runner(self, runner_id: int) -> list[PersonalBest]:
+        with _get_connection(self._db_path) as conn:
+            rows = conn.execute(
+                """SELECT * FROM personal_bests 
+                   WHERE runner_id = ? 
+                   ORDER BY achieved_date DESC""",
+                (runner_id,),
+            ).fetchall()
+        return [PersonalBest(**dict(r)) for r in rows]
+
+    def save(self, personal_best: PersonalBest) -> PersonalBest:
+        with _get_connection(self._db_path) as conn:
+            if personal_best.id == 0:  # New record
+                cursor = conn.execute(
+                    """INSERT OR REPLACE INTO personal_bests 
+                       (runner_id, pb_type, value, workout_id, achieved_date, previous_best)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (
+                        personal_best.runner_id,
+                        personal_best.pb_type,
+                        personal_best.value,
+                        personal_best.workout_id,
+                        personal_best.achieved_date,
+                        personal_best.previous_best,
+                    ),
+                )
+                # Return new record with assigned ID
+                return PersonalBest(
+                    id=cursor.lastrowid,
+                    runner_id=personal_best.runner_id,
+                    pb_type=personal_best.pb_type,
+                    value=personal_best.value,
+                    workout_id=personal_best.workout_id,
+                    achieved_date=personal_best.achieved_date,
+                    previous_best=personal_best.previous_best,
+                )
+            else:  # Update existing
+                conn.execute(
+                    """UPDATE personal_bests 
+                       SET value = ?, workout_id = ?, achieved_date = ?, previous_best = ?
+                       WHERE id = ?""",
+                    (
+                        personal_best.value,
+                        personal_best.workout_id,
+                        personal_best.achieved_date,
+                        personal_best.previous_best,
+                        personal_best.id,
+                    ),
+                )
+                return personal_best

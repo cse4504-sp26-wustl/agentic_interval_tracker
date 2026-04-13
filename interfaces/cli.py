@@ -16,6 +16,7 @@ from infrastructure.sqlite_repository import (
     SqliteRunnerRepository,
     SqliteWorkoutRepository,
     SqliteIntervalRepository,
+    SqlitePersonalBestRepository,
     init_db,
 )
 from infrastructure.pdf_generator import PdfReportGenerator
@@ -28,6 +29,7 @@ def build_use_case() -> GenerateReportsUseCase:
         runner_repo=SqliteRunnerRepository(),
         workout_repo=SqliteWorkoutRepository(),
         interval_repo=SqliteIntervalRepository(),
+        personal_best_repo=SqlitePersonalBestRepository(),
         report_generator=PdfReportGenerator(),
     )
 
@@ -56,6 +58,22 @@ def main() -> None:
     for r in result.results:
         if r.success:
             print(f"  [✓] {r.runner.name} → {r.pdf_path.name}")
+            # Show personal bests if any were achieved
+            if r.personal_bests:
+                for pb in r.personal_bests:
+                    if pb.is_improvement:
+                        print(f"      🏆 NEW PB: {pb.description}")
+                        if pb.previous_best:
+                            from domain.stats import format_duration, format_pace
+                            if 'pace' in pb.pb_type and pb.pb_type != 'avg_pace':
+                                old_desc = format_duration(pb.previous_best)
+                                improvement = pb.previous_best - pb.value
+                                print(f"          (Previous: {old_desc}, improved by {format_duration(improvement)})")
+                            elif pb.pb_type == 'avg_pace':
+                                old_desc = format_pace(pb.previous_best)
+                                print(f"          (Previous: {old_desc})")
+                            else:  # distance
+                                print(f"          (Previous: {int(pb.previous_best)}m)")
         else:
             print(f"  [!] {r.runner.name} — skipped ({r.reason})")
 
