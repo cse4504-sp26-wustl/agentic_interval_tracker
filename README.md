@@ -13,11 +13,12 @@ interval-tracker/
 │   └── repositories.py      #   Abstract interfaces for data access
 │
 ├── application/             # Use cases — orchestrates domain objects
-│   └── use_cases.py         #   GenerateReportsUseCase
+│   └── use_cases.py         #   GenerateReportsUseCase, EmailReportsUseCase
 │
 ├── infrastructure/          # Concrete implementations
 │   ├── sqlite_repository.py #   SQLite implementations of domain interfaces
-│   └── pdf_generator.py     #   reportlab PDF generation
+│   ├── pdf_generator.py     #   reportlab PDF generation
+│   └── email_sender.py      #   SMTP email delivery
 │
 ├── interfaces/              # Entry points
 │   └── cli.py               #   argparse CLI, wires all dependencies together
@@ -45,9 +46,49 @@ python -m interfaces.cli
 
 # 4. Or for a single runner
 python -m interfaces.cli --runner-id 1
+
+# 5. Generate reports AND email them to runners
+python -m interfaces.cli --send-email
+
+# 6. Test email delivery without actually sending
+python -m interfaces.cli --send-email --dry-run
 ```
 
 Reports are written to `reports/`, named `<Runner_Name>_<date>.pdf`.
+
+## Email Delivery
+
+The application can email PDF reports to runners via SMTP. Configure email delivery using environment variables:
+
+### Required Environment Variables
+
+```bash
+SMTP_HOST=smtp.gmail.com          # SMTP server hostname
+SMTP_USERNAME=your@email.com     # Email username for authentication
+SMTP_PASSWORD=your-password       # Email password or app-specific password
+```
+
+### Optional Environment Variables
+
+```bash
+SMTP_PORT=587                     # SMTP port (default: 587)
+SMTP_FROM_EMAIL=your@email.com   # From address (default: uses SMTP_USERNAME)
+```
+
+### Email Options
+
+- `--send-email`: Send PDF reports via email after generation
+- `--dry-run`: Simulate email sending without actually sending emails (requires `--send-email`)
+
+### Example Email Configuration
+
+For Gmail with app-specific password:
+```bash
+export SMTP_HOST=smtp.gmail.com
+export SMTP_PORT=587
+export SMTP_USERNAME=your-email@gmail.com
+export SMTP_PASSWORD=your-app-password
+```
 
 ## Running Tests
 
@@ -63,21 +104,3 @@ workouts       id, runner_id, workout_date, notes
 intervals      id, workout_id, interval_number,
                distance_meters, duration_seconds, rest_seconds
 ```
-
-## What's Missing (Your Task)
-
-After generating reports the app has no delivery mechanism.
-**The next feature is email delivery:** send each runner their PDF report
-as an email attachment via SMTP.
-
-Where it fits in the architecture:
-- `infrastructure/email_sender.py` — SMTP implementation
-- `application/use_cases.py` — a new `EmailReportsUseCase` (or extend the existing one)
-- `interfaces/cli.py` — add a `--send-email` flag
-
-Things to consider:
-- SMTP config (host, port, credentials) should come from environment variables
-- Each runner already has an `email` field
-- PDFs are already in `reports/` by the time email runs
-- Skip runners whose report file is missing
-- Add a `--dry-run` flag that logs without sending
